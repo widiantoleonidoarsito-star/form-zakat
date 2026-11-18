@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Form Terobosan 4 - Rekapitulasi Zakat Fitrah (ZF)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <!-- Firebase SDK (Compat) untuk Sinkronisasi Multi-User Real-Time -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: #f3f7f4; }
+    .excel-table th, .excel-table td { border: 1px solid #94a3b8; }
+    input[type="number"]::-webkit-inner-spin-button { opacity: 1; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800">
+
+  <!-- MODAL KONFIGURASI FIREBASE (AGAR ONLINE MULTI-USER) -->
+  <div id="firebaseModal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+      <div class="flex justify-between items-center border-b pb-3 mb-4">
+        <h3 class="text-lg font-bold text-emerald-900">Pengaturan Database Online (Multi-User)</h3>
+        <button onclick="toggleFirebaseModal(false)" class="text-slate-400 hover:text-slate-700 text-xl font-bold">×</button>
+      </div>
+      <p class="text-xs text-slate-600 mb-3 leading-relaxed">
+        Agar data yang diisi banyak pengurus dari HP berbeda langsung masuk ke satu rekap online secara <b>real-time</b>, tempelkan konfigurasi <b>Firebase Firestore</b> Anda di bawah ini (atau biarkan kosong untuk mode penyimpanan lokal perangkat):
+      </p>
+      <textarea id="firebaseConfigInput" rows="7" placeholder='{
+  "apiKey": "AIzaSy...",
+  "authDomain": "proyek-anda.firebaseapp.com",
+  "projectId": "proyek-anda",
+  "storageBucket": "proyek-anda.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abcdef"
+}' class="w-full border border-slate-300 rounded-xl p-3 text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none"></textarea>
+      <div class="flex justify-between items-center mt-4 gap-2">
+        <button onclick="resetFirebaseConfig()" class="px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded-lg font-medium">Reset ke Lokal</button>
+        <div class="flex gap-2">
+          <button onclick="toggleFirebaseModal(false)" class="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold">Batal</button>
+          <button onclick="saveFirebaseConfig()" class="px-4 py-2 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold">Simpan & Hubungkan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HALAMAN 1: LOGIN SEDERHANA (NAMA KELOMPOK & DESA) -->
+  <div id="loginView" class="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900">
+    <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+      <div class="bg-emerald-700 px-6 py-6 text-center text-white relative">
+        <span class="inline-block bg-amber-400 text-emerald-950 text-[11px] font-extrabold px-3 py-0.5 rounded-full uppercase tracking-wider mb-2">Form Terobosan 4</span>
+        <h1 class="text-xl font-extrabold tracking-tight">REKAPITULASI ZAKAT FITRAH</h1>
+        <p class="text-emerald-100 text-xs mt-1">Sistem Input & Rekap Data Kelompok / Desa</p>
+      </div>
+
+      <form onsubmit="handleLogin(event)" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nama Kelompok <span class="text-red-500">*</span></label>
+          <input type="text" id="loginKelompok" list="daftarKelompokSaran" required placeholder="Contoh: PAKAH / GENDINGAN / BARENG BARAT"
+            class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200 outline-none font-semibold uppercase text-sm" />
+          <datalist id="daftarKelompokSaran">
+            <option value="PAKAH"></option>
+            <option value="BARENG BARAT"></option>
+            <option value="BARENG TIMUR"></option>
+            <option value="KENTENG BARAT"></option>
+            <option value="KENTENG TIMUR"></option>
+            <option value="GENDINGAN"></option>
+            <option value="MENGGER"></option>
+            <option value="NGAMPON 1"></option>
+            <option value="NGAMPON 2"></option>
+            <option value="SAMBIREJO"></option>
+            <option value="BENDO"></option>
+          </datalist>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nama Desa <span class="text-red-500">*</span></label>
+          <input type="text" id="loginDesa" required value="GENDINGAN" placeholder="Contoh: GENDINGAN"
+            class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200 outline-none font-semibold uppercase text-sm" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Periode Tahun</label>
+          <input type="text" id="loginTahun" required value="TAHUN 2026 / 1447 H"
+            class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 outline-none text-sm font-medium uppercase" />
+        </div>
+
+        <button type="submit" class="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-emerald-700/30 transition text-sm">
+          MASUK & ISI DATA ZAKAT FITRAH →
+        </button>
+
+        <div class="pt-2 border-t flex items-center justify-between text-xs text-slate-500">
+          <span id="dbStatusBadgeLogin" class="flex items-center gap-1.5 font-medium">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span> Mode Lokal Browser
+          </span>
+          <button type="button" onclick="toggleFirebaseModal(true)" class="text-emerald-700 font-bold hover:underline">
+            Atur Online DB
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- HALAMAN 2: APLIKASI UTAMA (INPUT & REKAPITULASI) -->
+  <div id="appView" class="hidden pb-16">
+    <!-- TOP NAVBAR -->
+    <header class="bg-emerald-800 text-white shadow-md sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="bg-amber-400 text-emerald-950 text-[10px] font-extrabold px-2 py-0.5 rounded uppercase">Form Terobosan 4</span>
+            <span id="dbStatusBadgeApp" class="text-[11px] bg-emerald-900/80 px-2.5 py-0.5 rounded-full text-emerald-200">Lokal</span>
+          </div>
+          <h1 class="text-base sm:text-lg font-extrabold tracking-tight mt-0.5">
+            KELOMPOK: <span id="headerKelompok" class="text-amber-300">-</span> • DESA: <span id="headerDesa" class="text-amber-300">-</span>
+          </h1>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="toggleFirebaseModal(true)" class="px-3 py-2 bg-emerald-900 hover:bg-emerald-950 text-emerald-100 rounded-xl text-xs font-semibold border border-emerald-700">
+            DB Online
+          </button>
+          <button onclick="downloadExcel()" class="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-emerald-950 rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
+            <span>Unduh Excel (.xlsx)</span>
+          </button>
+          <button onclick="handleLogout()" class="px-3 py-2 bg-red-600/90 hover:bg-red-700 text-white rounded-xl text-xs font-bold">
+            Ganti Kelompok
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB NAVIGASI -->
+      <div class="bg-emerald-900/60 border-t border-emerald-700/70">
+        <div class="max-w-7xl mx-auto px-4 flex gap-2">
+          <button id="tabBtnInput" onclick="switchTab('input')" class="py-2.5 px-4 text-xs sm:text-sm font-bold border-b-4 border-amber-400 text-white">
+            1. Isian Data Kelompok
+          </button>
+          <button id="tabBtnRekap" onclick="switchTab('rekap')" class="py-2.5 px-4 text-xs sm:text-sm font-bold border-b-4 border-transparent text-emerald-200 hover:text-white flex items-center gap-2">
+            2. Rekapitulasi Desa
+            <span id="rekapCountBadge" class="bg-amber-400 text-emerald-950 text-[11px] font-extrabold px-2 py-0.5 rounded-full">0</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- NOTIFIKASI TOAST -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 hidden bg-emerald-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-emerald-500 text-sm font-semibold items-center gap-2"></div>
+
+    <!-- TAB 1: FORMULIR ISIAN DATA ZAKAT FITRAH -->
+    <main id="sectionInput" class="max-w-5xl mx-auto px-4 pt-6 space-y-6">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-5">
+          <div>
+            <h2 class="text-base font-extrabold text-slate-800">Formulir Data Zakat Fitrah (Satuan: Sok & Orang)</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Isi angka sesuai perolehan & pembagian zakat fitrah kelompok, lalu klik tombol <b>Simpan Data</b> di bawah.</p>
+          </div>
+          <button type="button" onclick="autoHitungPersentase()" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition">
+            Hitung Otomatis Persentase (40% / 1% / 3% / 11%)
+          </button>
+        </div>
+
+        <form id="zfForm" onsubmit="saveGroupData(event)" class="space-y-6">
+          <!-- BARIS 1: TOTAL, SB DAERAH, AMIL, BUDAK -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- JML TOTAL -->
+            <div class="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4">
+              <label class="block text-xs font-extrabold text-emerald-900 uppercase">JML TOTAL (sok)</label>
+              <p class="text-[11px] text-emerald-700 mb-2">Total perolehan zakat fitrah kelompok</p>
+              <input type="number" step="any" min="0" id="f_total" oninput="updateLiveSummary()" required placeholder="0"
+                class="w-full px-3.5 py-2.5 bg-white border border-emerald-300 rounded-xl text-base font-extrabold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+            </div>
+
+            <!-- SB DAERAH (40%) -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <label class="block text-xs font-extrabold text-slate-800 uppercase">SB DAERAH (40%)</label>
+              <p class="text-[11px] text-slate-500 mb-2">Setoran bagian daerah (dalam sok)</p>
+              <input type="number" step="any" min="0" id="f_sb_daerah" oninput="updateLiveSummary()" placeholder="0"
+                class="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-base font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+            </div>
+
+            <!-- BUDAK -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <label class="block text-xs font-extrabold text-slate-800 uppercase">BUDAK (sok)</label>
+              <p class="text-[11px] text-slate-500 mb-2">Alokasi bagian budak (jika ada)</p>
+              <input type="number" step="any" min="0" id="f_budak" oninput="updateLiveSummary()" placeholder="0"
+                class="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-base font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+            </div>
+          </div>
+
+          <!-- BAGIAN AMIL (15%) -->
+          <div class="bg-amber-50/50 border border-amber-20
